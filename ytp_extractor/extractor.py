@@ -1,26 +1,53 @@
-import csv
-import json
-from pathlib import Path
 from typing import List
+import yt_dlp
 from .models import VideoMetadata
 
-class DataExporter:
-    @staticmethod
-    def to_json(videos: List[VideoMetadata], output_path: Path) -> None:
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        data = [video.to_dict() for video in videos]
-        with open(output_path, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+class PlaylistExtractor:
+    def __init__(self, download_audio: bool = False, output_dir: str = "downloads"):
+        self.download_audio = download_audio
+        self.output_dir = output_dir
 
-    @staticmethod
-    def to_csv(videos: List[VideoMetadata], output_path: Path) -> None:
-        output_path.parent.mkdir(parents=True, exist_ok=True)
-        if not videos:
-            return
+    def _get_ydl_opts(self) -> dict:
+        opts = {
+            'extract_flat': not self.download_audio,  # True = rapide, extrait seulement les métadonnées
+            'quiet': True,
+            'no_warnings': True,
+        }
+        if self.download_audio:
+            opts.update({
+                'format': 'bestaudio/best',
+                'outtmpl': f'{self.output_dir}/%(title)s.%(ext)s',
+                'postprocessors': [{
+                    'key': 'FFmpegExtractAudio',
+                    'preferredcodec': 'mp3',
+                    'preferredquality': '192',
+                }],
+            })
+        return opts
+
+    def extract(self, playlist_url: str) -> List[VideoMetadata]:
+        videos: List[VideoMetadata] = []
         
-        fieldnames = ["id", "title", "duration_seconds", "channel", "url", "thumbnail_url"]
-        with open(output_path, "w", encoding="utf-8", newline="") as f:
-            writer = csv.DictWriter(f, fieldnames=fieldnames)
-            writer.writeheader()
-            for video in videos:
-                writer.writerow(video.to_dict())
+        with yt_dlp.YoutubeDL(self._get_ydl_opts()) as ydl:
+            # extract_flat permet de récupérer les infos de la playlist sans tout télécharger d'un coup
+            info = ydl.extract_info(playlist_url, download=self.download_audio)
+            
+            if 'entries' not in info:
+                # Lien vidéo unique plutôt que playlist
+                entries = [info]
+            else:
+                entries = info['entries']
+
+            for entry in entries:
+                if not entry:
+                    continue
+                videos.append(VideoMetadata(
+                    id=entry.get('id', ''),
+                    title=entry.get('title', 'Sans titre'),
+                    duration_seconds=entry.get('duration'),
+                    channel=entry.get('uploader', 'Inconnu'),
+                    url=entry.get('url') or f"https://www.youtube.com/watch?v={entry.get('id')}",
+                    thumbnail_url=entry.get('thumbnail')
+                ))
+
+        return videos
