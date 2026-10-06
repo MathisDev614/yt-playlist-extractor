@@ -1,0 +1,20 @@
+# Environnement virtuel
+.venv/
+venv/
+ENV/
+
+# Caches d'exécution Python
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Fichiers de sortie générés par ton script
+output/
+downloads/
+*.mp3
+*.m4a
+
+# Fichiers spécifiques aux IDE
+.vscode/
+.idea/
+.DS_Store
